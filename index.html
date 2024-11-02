@@ -88,24 +88,17 @@
         <h1>Plateforme Adventure</h1>
         <div id="menuContent"></div>
     </div>
-    <div id="previewControls" style="display: none;">
-        <h2>Mode Preview</h2>
-        <label>Vitesse: <input type="number" id="speedInput" value="5"></label>
-        <label>Saut: <input type="number" id="jumpForceInput" value="12"></label>
-        <button onclick="applyPreviewSettings()">Appliquer</button>
-    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const menu = document.getElementById('menu');
         const controls = document.getElementById('controls');
-        const previewControls = document.getElementById('previewControls');
         
         canvas.width = 800;
         canvas.height = 400;
 
-        let gameState = 'menu';
+        let gameState = 'menu'; // menu, game, levelComplete
         let currentLevel = 0;
         let coins = 0;
         let totalCoins = 0;
@@ -118,31 +111,40 @@
             height: 30,
             speed: 5,
             velY: 0,
-            jumpForce: 12,
-            hasKey: false,
-            sizeFactor: 1
+            coins: 0
         };
 
-        // Modèle des niveaux avec obstacles, portes et clés
         function createLevel(index) {
+            if (index === 8) { // Niveau 9 (index 8) modifié
+                return {
+                    platforms: [
+                        {x: 0, y: canvas.height - 20, width: canvas.width, height: 20},
+                        {x: 100, y: 320, width: 100, height: 20},
+                        {x: 250, y: 280, width: 100, height: 20},
+                        {x: 400, y: 240, width: 100, height: 20},
+                        {x: 550, y: 200, width: 100, height: 20},
+                        {x: 700, y: 160, width: 100, height: 20}
+                    ],
+                    coins: [
+                        {x: 120, y: 280, collected: false},
+                        {x: 420, y: 200, collected: false},
+                        {x: 720, y: 120, collected: false}
+                    ],
+                    start: {x: 50, y: canvas.height - 50}
+                };
+            }
+
+            // Autres niveaux
             return {
                 platforms: [
                     {x: 0, y: canvas.height - 20, width: canvas.width, height: 20},
-                    {x: 200, y: 300, width: 100, height: 20},
-                    // Niveau modifié pour les éléments interactifs
-                    {x: 400, y: 250, width: 100, height: 20},
+                    {x: 200 + index * 30, y: 300 - index * 20, width: 200, height: 20},
+                    {x: 500 - index * 30, y: 200 - index * 20, width: 200, height: 20}
                 ],
                 coins: [
-                    {x: 450, y: 220, collected: false},
-                ],
-                doors: [
-                    {x: 600, y: canvas.height - 70, width: 30, height: 50, locked: true}
-                ],
-                keys: [
-                    {x: 350, y: 250, collected: false}
-                ],
-                growButtons: [
-                    {x: 550, y: canvas.height - 60, width: 30, height: 30}
+                    {x: 300 + index * 30, y: 260 - index * 20, collected: false},
+                    {x: 600 - index * 30, y: 160 - index * 20, collected: false},
+                    {x: 450, y: canvas.height - 60, collected: false}
                 ],
                 start: {x: 50, y: canvas.height - 50}
             };
@@ -159,7 +161,6 @@
         function showMenu() {
             menu.style.display = 'block';
             controls.style.display = 'none';
-            previewControls.style.display = 'none';
             const menuContent = document.getElementById('menuContent');
             menuContent.innerHTML = `
                 <h2>Niveaux Débloqués: ${unlockedLevels}/10</h2>
@@ -182,14 +183,12 @@
             menu.style.display = 'none';
             controls.style.display = 'flex';
             
+            // Réinitialiser le niveau
             player.x = levels[level].start.x;
             player.y = levels[level].start.y;
             player.velY = 0;
-            player.hasKey = false;
             coins = 0;
             levels[level].coins.forEach(coin => coin.collected = false);
-            levels[level].keys.forEach(key => key.collected = false);
-            levels[level].doors.forEach(door => door.locked = true);
         }
 
         function checkCollision(rect1, rect2) {
@@ -201,41 +200,72 @@
 
         function checkCoinCollection() {
             levels[currentLevel].coins.forEach(coin => {
-                if (!coin.collected && checkCollision(player, {x: coin.x, y: coin.y, width: 20, height: 20})) {
+                if (!coin.collected && checkCollision(player, {
+                    x: coin.x,
+                    y: coin.y,
+                    width: 20,
+                    height: 20
+                })) {
                     coin.collected = true;
                     coins++;
                     totalCoins++;
+                    
+                    // Vérifier si tous les niveaux sont collectés
+                    if (coins === levels[currentLevel].coins.length) {
+                        if (currentLevel === unlockedLevels - 1 && unlockedLevels < 10) {
+                            unlockedLevels++;
+                        }
+                        gameState = 'levelComplete';
+                        setTimeout(showMenu, 1000);
+                    }
                 }
             });
         }
 
-        function checkKeyCollection() {
-            levels[currentLevel].keys.forEach(key => {
-                if (!key.collected && checkCollision(player, {x: key.x, y: key.y, width: 20, height: 20})) {
-                    key.collected = true;
-                    player.hasKey = true;
-                }
-            });
-        }
+        // Gestionnaire d'événements
+        window.addEventListener('keydown', (e) => {
+            if (gameState !== 'game') return;
+            switch(e.key) {
+                case 'ArrowLeft': keys.left = true; break;
+                case 'ArrowRight': keys.right = true; break;
+                case 'ArrowUp': case ' ': keys.up = true; break;
+                case 'Escape': showMenu(); break;
+            }
+        });
 
-        function checkDoorUnlock() {
-            levels[currentLevel].doors.forEach(door => {
-                if (door.locked && player.hasKey && checkCollision(player, door)) {
-                    door.locked = false;
-                    player.hasKey = false;
-                }
-            });
-        }
+        window.addEventListener('keyup', (e) => {
+            switch(e.key) {
+                case 'ArrowLeft': keys.left = false; break;
+                case 'ArrowRight': keys.right = false; break;
+                case 'ArrowUp': case ' ': keys.up = false; break;
+            }
+        });
 
-        function checkGrowButton() {
-            levels[currentLevel].growButtons.forEach(button => {
-                if (checkCollision(player, button)) {
-                    player.sizeFactor = player.sizeFactor === 1 ? 1.5 : 1;
-                    player.width *= player.sizeFactor;
-                    player.height *= player.sizeFactor;
+        // Contrôles tactiles améliorés
+        ['leftBtn', 'rightBtn', 'jumpBtn'].forEach(id => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                switch(id) {
+                    case 'leftBtn': keys.left = true; break;
+                    case 'rightBtn': keys.right = true; break;
+                    case 'jumpBtn': keys.up = true; break;
                 }
             });
-        }
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                switch(id) {
+                    case 'leftBtn': keys.left = false; break;
+                    case 'rightBtn': keys.right = false; break;
+                    case 'jumpBtn': keys.up = false; break;
+                }
+            });
+        });
+
+        // Support manette
+        window.addEventListener("gamepadconnected", (e) => {
+            console.log("Manette connectée!");
+        });
 
         function checkGamepad() {
             const gamepad = navigator.getGamepads()[0];
@@ -244,17 +274,6 @@
                 keys.right = gamepad.buttons[15].pressed || gamepad.axes[0] > 0.5;
                 keys.up = gamepad.buttons[0].pressed || gamepad.buttons[12].pressed;
             }
-        }
-
-        function applyPreviewSettings() {
-            player.speed = Number(document.getElementById('speedInput').value);
-            player.jumpForce = Number(document.getElementById('jumpForceInput').value);
-        }
-
-        function gameLoop() {
-            update();
-            draw();
-            requestAnimationFrame(gameLoop);
         }
 
         function update() {
@@ -266,26 +285,90 @@
             if (keys.left) player.x -= player.speed;
             if (keys.right) player.x += player.speed;
 
-            // Gravité et saut
+            // Gravité
             player.velY += 0.5;
             player.y += player.velY;
-            if (keys.up && checkCollision(player, {x: player.x, y: player.y + 1, width: player.width, height: 1})) {
-                player.velY = -player.jumpForce;
+
+            // Collision avec les plateformes
+            let onGround = false;
+            levels[currentLevel].platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.velY > 0) {
+                        player.y = platform.y - player.height;
+                        player.velY = 0;
+                        onGround = true;
+                    }
+                }
+            });
+
+            // Saut
+            if (keys.up && onGround) {
+                player.velY = -12;
             }
 
-            // Vérifications des collisions
+            // Limites du canvas
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+                player.velY = 0;
+            }
+
+            // Vérifier la collection de pièces
             checkCoinCollection();
-            checkKeyCollection();
-            checkDoorUnlock();
-            checkGrowButton();
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            levels[currentLevel].platforms.forEach(platform => ctx.fillRect(platform.x, platform.y, platform.width, platform.height));
-            levels[currentLevel].coins.forEach(coin => !coin.collected && ctx.fillRect(coin.x, coin.y, 10, 10));
+
+            if (gameState === 'game' || gameState === 'levelComplete') {
+                // Dessiner les plateformes
+                ctx.fillStyle = '#666';
+                levels[currentLevel].platforms.forEach(platform => {
+                    ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                });
+
+                // Dessiner les pièces
+                ctx.fillStyle = '#FFD700';
+                levels[currentLevel].coins.forEach(coin => {
+                    if (!coin.collected) {
+                        ctx.beginPath();
+                        ctx.arc(coin.x + 10, coin.y + 10, 10, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+
+                // Dessiner le joueur
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+
+                // Afficher le score
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Arial';
+                ctx.fillText(`Pièces: ${coins}/${levels[currentLevel].coins.length}`, 10, 30);
+                ctx.fillText(`Niveau: ${currentLevel + 1}`, 10, 60);
+
+                if (gameState === 'levelComplete') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = 'white';
+                    ctx.font = '40px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Niveau Terminé!', canvas.width/2, canvas.height/2);
+                    ctx.font = '20px Arial';
+                    ctx.fillText('Appuyez sur une touche pour continuer', canvas.width/2, canvas.height/2 + 40);
+                }
+            }
         }
 
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Démarrer avec le menu
+        showMenu();
         gameLoop();
     </script>
 </body>
